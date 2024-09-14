@@ -1,4 +1,5 @@
 use infer;
+use std::borrow::Cow;
 use std::env;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -76,37 +77,57 @@ fn serve_directory(path: &Path, root_dir: &Path, stream: &mut TcpStream) {
             a:hover { text-decoration: underline; }
         </style>
     </head> 
-    <body>"#.to_string();
+    <body>"#
+        .to_string();
 
     let relative_path = path.strip_prefix(root_dir).unwrap_or(path);
-    let header = format!("<h1>Directory listing for /{}</h1>", relative_path.display());
+    let header = format!(
+        "<h1>Directory listing for /{}</h1>",
+        relative_path.display()
+    );
     begin_html.push_str(&header);
 
     let mut body = String::new();
     body.push_str("<ul>");
-    
-    // Add "Go back up a directory" link if not at root
-    if path != root_dir {
-        if let Some(parent) = path.parent() {
-            if parent.starts_with(root_dir) {
-                let parent_path = parent.strip_prefix(root_dir).unwrap_or(parent);
-                let parent_path_display = format!("/{}", parent_path.display());
-                let parent_url = url_escape::encode_query(&parent_path_display);
-                body.push_str(&format!(
-                    "<li><a href=\"{}\">⬆️ Go back up a directory</a></li>",
-                    parent_url
-                ));
-            }
+
+    // Always display "Go back up a directory" even at root
+    let parent_url: String = if path == root_dir {
+        "/".to_string() // At root, link just reloads the root
+    } else if let Some(parent) = path.parent() {
+        if parent.starts_with(root_dir) {
+            let parent_display = parent
+                .strip_prefix(root_dir)
+                .unwrap_or(parent)
+                .display()
+                .to_string();
+            url_escape::encode_query(&format!("/{}", parent_display)).to_string()
+        } else {
+            "/".to_string() // If for any reason parent is outside root, go back to "/"
         }
-    }
+    } else {
+        "/".to_string() // Fallback in case of unexpected errors
+    };
+
+    body.push_str(&format!(
+        "<li><a href=\"{}\">⬆️ Go back up a directory</a></li>",
+        parent_url
+    ));
 
     // List current directory entries
-    for entry in WalkDir::new(path).min_depth(1).max_depth(1).sort_by_file_name() {
+    for entry in WalkDir::new(path)
+        .min_depth(1)
+        .max_depth(1)
+        .sort_by_file_name()
+    {
         if let Ok(entry) = entry {
             let entry_path = entry.path();
             let relative_path = entry_path.strip_prefix(root_dir).unwrap_or(entry_path);
             let entry_name = entry_path.file_name().unwrap_or_default().to_string_lossy();
-            let entry_type = if entry_path.is_dir() { "📁 " } else { "📄 " };
+            let entry_type = if entry_path.is_dir() {
+                "📁 "
+            } else {
+                "📄 "
+            };
             body.push_str(&format!(
                 "<li>{}<a href=\"/{}\">{}</a></li>",
                 entry_type,
@@ -119,7 +140,8 @@ fn serve_directory(path: &Path, root_dir: &Path, stream: &mut TcpStream) {
 
     let end_html = r#"
     </body>
-    </html>"#.to_string();
+    </html>"#
+        .to_string();
 
     let response_body = format!("{}{}{}", begin_html, body, end_html);
     let response = format!(
@@ -131,7 +153,6 @@ fn serve_directory(path: &Path, root_dir: &Path, stream: &mut TcpStream) {
     stream.write_all(response.as_bytes()).unwrap();
     stream.flush().unwrap();
 }
-
 
 fn serve_file(path: &Path, stream: &mut TcpStream) {
     let mut file = match File::open(path) {
@@ -163,12 +184,13 @@ fn serve_file(path: &Path, stream: &mut TcpStream) {
         || path.extension().and_then(|ext| ext.to_str()) == Some("rs")  // Rust files
         || path.extension().and_then(|ext| ext.to_str()) == Some("toml") // TOML files
         || path.extension().and_then(|ext| ext.to_str()) == Some("lock") // Lock files
-        || mime_type == "text/plain";  // Default fallback for unknown types
+        || mime_type == "text/plain"; // Default fallback for unknown types
 
     // Set Content-Type for Rust, TOML, and lock files as plain text
-    let custom_mime_type = if path.extension().and_then(|ext| ext.to_str()) == Some("rs") 
+    let custom_mime_type = if path.extension().and_then(|ext| ext.to_str()) == Some("rs")
         || path.extension().and_then(|ext| ext.to_str()) == Some("toml")
-        || path.extension().and_then(|ext| ext.to_str()) == Some("lock") {
+        || path.extension().and_then(|ext| ext.to_str()) == Some("lock")
+    {
         "text/plain"
     } else {
         &mime_type
@@ -202,7 +224,6 @@ fn serve_file(path: &Path, stream: &mut TcpStream) {
 
     stream.flush().unwrap_or(());
 }
-
 
 fn respond_404(stream: &mut TcpStream) {
     let response = "HTTP/1.1 404 NOT FOUND\r\n\r\n";
