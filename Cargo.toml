@@ -1,0 +1,9 @@
+[package]
+name = "simple-file-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+walkdir = "2.3.2"
+infer = "0.6.0"
+url-escape = "0.1.1"
