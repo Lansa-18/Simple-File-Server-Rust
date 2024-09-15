@@ -1,5 +1,4 @@
 use infer;
-use std::borrow::Cow;
 use std::env;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -81,10 +80,15 @@ fn serve_directory(path: &Path, root_dir: &Path, stream: &mut TcpStream) {
         .to_string();
 
     let relative_path = path.strip_prefix(root_dir).unwrap_or(path);
-    let header = format!(
-        "<h1>Directory listing for /{}</h1>",
-        relative_path.display()
-    );
+    let header = if relative_path.as_os_str().is_empty() {
+        format!("<h1>Directory listing for {}</h1>", root_dir.display())
+    } else {
+        format!(
+            "<h1>Directory listing for {}/{}</h1>",
+            root_dir.display(),
+            relative_path.display()
+        )
+    };
     begin_html.push_str(&header);
 
     let mut body = String::new();
